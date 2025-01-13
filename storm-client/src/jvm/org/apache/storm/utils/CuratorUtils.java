@@ -21,20 +21,22 @@ package org.apache.storm.utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import javax.naming.ConfigurationException;
 import org.apache.storm.Config;
 import org.apache.storm.shade.org.apache.commons.lang.StringUtils;
-import org.apache.storm.shade.org.apache.curator.ensemble.exhibitor.DefaultExhibitorRestClient;
-import org.apache.storm.shade.org.apache.curator.ensemble.exhibitor.ExhibitorEnsembleProvider;
-import org.apache.storm.shade.org.apache.curator.ensemble.exhibitor.Exhibitors;
 import org.apache.storm.shade.org.apache.curator.framework.CuratorFramework;
 import org.apache.storm.shade.org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.storm.shade.org.apache.curator.framework.api.ACLProvider;
+import org.apache.storm.shade.org.apache.zookeeper.client.ZKClientConfig;
+import org.apache.storm.shade.org.apache.zookeeper.common.ClientX509Util;
 import org.apache.storm.shade.org.apache.zookeeper.data.ACL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class CuratorUtils {
     public static final Logger LOG = LoggerFactory.getLogger(CuratorUtils.class);
+    public static final String CLIENT_CNXN
+            = org.apache.storm.shade.org.apache.zookeeper.ClientCnxnSocketNetty.class.getName();
 
     public static CuratorFramework newCurator(Map<String, Object> conf, List<String> servers, Object port, String root,
                                               List<ACL> defaultAcl) {
@@ -75,29 +77,7 @@ public class CuratorUtils {
 
     protected static void setupBuilder(CuratorFrameworkFactory.Builder builder, final String zkStr, Map<String, Object> conf,
                                        ZookeeperAuthInfo auth) {
-        List<String> exhibitorServers = ObjectReader.getStrings(conf.get(Config.STORM_EXHIBITOR_SERVERS));
-        if (!exhibitorServers.isEmpty()) {
-            // use exhibitor servers
-            builder.ensembleProvider(new ExhibitorEnsembleProvider(
-                new Exhibitors(exhibitorServers,
-                        ObjectReader.getInt(conf.get(Config.STORM_EXHIBITOR_PORT)),
-                        new Exhibitors.BackupConnectionStringProvider() {
-                            @Override
-                            public String getBackupConnectionString() throws Exception {
-                                // use zk servers as backup if they exist
-                                return zkStr;
-                            }
-                        }),
-                new DefaultExhibitorRestClient(),
-                ObjectReader.getString(conf.get(Config.STORM_EXHIBITOR_URIPATH)),
-                ObjectReader.getInt(conf.get(Config.STORM_EXHIBITOR_POLL)),
-                new StormBoundedExponentialBackoffRetry(
-                        ObjectReader.getInt(conf.get(Config.STORM_EXHIBITOR_RETRY_INTERVAL)),
-                        ObjectReader.getInt(conf.get(Config.STORM_EXHIBITOR_RETRY_INTERVAL_CEILING)),
-                        ObjectReader.getInt(conf.get(Config.STORM_EXHIBITOR_RETRY_TIMES)))));
-        } else {
-            builder.connectString(zkStr);
-        }
+        builder.connectString(zkStr);
         builder
                 .connectionTimeoutMs(ObjectReader.getInt(conf.get(Config.STORM_ZOOKEEPER_CONNECTION_TIMEOUT)))
                 .sessionTimeoutMs(ObjectReader.getInt(conf.get(Config.STORM_ZOOKEEPER_SESSION_TIMEOUT)))
@@ -108,6 +88,119 @@ public class CuratorUtils {
 
         if (auth != null && auth.scheme != null && auth.payload != null) {
             builder.authorization(auth.scheme, auth.payload);
+        }
+        boolean sslEnabled = ObjectReader.getBoolean(conf.get(Config.ZK_SSL_ENABLE), false);
+        if (sslEnabled) {
+            SslConf sslConf = new SslConf(conf);
+            ZKClientConfig zkClientConfig = new ZKClientConfig();
+            try {
+                setSslConfiguration(zkClientConfig, new ClientX509Util(), sslConf);
+            } catch (ConfigurationException e) {
+                throw new RuntimeException(e);
+            }
+            builder.zkClientConfig(zkClientConfig);
+        }
+    }
+
+    /**
+     * Configure ZooKeeper Client with SSL/TLS connection.
+     * @param zkClientConfig ZooKeeper Client configuration
+     * @param x509Util The X509 utility
+     * @param sslConf The truststore and keystore configs
+     */
+    private static void setSslConfiguration(ZKClientConfig zkClientConfig,
+                                            ClientX509Util x509Util, SslConf sslConf)
+            throws ConfigurationException {
+        validateSslConfiguration(sslConf);
+        LOG.info("Configuring the ZooKeeper client to use SSL/TLS encryption for connecting to the "
+                + "ZooKeeper server.");
+        LOG.debug("Configuring the ZooKeeper client with {} location: {}.",
+                sslConf.keystoreLocation,
+                Config.STORM_ZOOKEEPER_SSL_KEYSTORE_PATH);
+        LOG.debug("Configuring the ZooKeeper client with {} location: {}.",
+                sslConf.truststoreLocation,
+                Config.STORM_ZOOKEEPER_SSL_TRUSTSTORE_PATH);
+
+        zkClientConfig.setProperty(ZKClientConfig.SECURE_CLIENT, "true");
+        zkClientConfig.setProperty(ZKClientConfig.ZOOKEEPER_CLIENT_CNXN_SOCKET,
+                CLIENT_CNXN);
+        zkClientConfig.setProperty(x509Util.getSslKeystoreLocationProperty(),
+                sslConf.keystoreLocation);
+        zkClientConfig.setProperty(x509Util.getSslKeystorePasswdProperty(),
+                sslConf.keystorePassword);
+        zkClientConfig.setProperty(x509Util.getSslTruststoreLocationProperty(),
+                sslConf.truststoreLocation);
+        zkClientConfig.setProperty(x509Util.getSslTruststorePasswdProperty(),
+                sslConf.truststorePassword);
+        zkClientConfig.setProperty(x509Util.getSslHostnameVerificationEnabledProperty(),
+                sslConf.hostnameVerification.toString());
+    }
+
+    private static void validateSslConfiguration(SslConf sslConf) throws ConfigurationException {
+        if (StringUtils.isEmpty(sslConf.getKeystoreLocation())) {
+            throw new ConfigurationException(
+                    "The keystore location parameter is empty for the ZooKeeper client connection.");
+        }
+        if (StringUtils.isEmpty(sslConf.getKeystorePassword())) {
+            throw new ConfigurationException(
+                    "The keystore password parameter is empty for the ZooKeeper client connection.");
+        }
+        if (StringUtils.isEmpty(sslConf.getTruststoreLocation())) {
+            throw new ConfigurationException(
+                    "The truststore location parameter is empty for the ZooKeeper client connection" + ".");
+        }
+        if (StringUtils.isEmpty(sslConf.getTruststorePassword())) {
+            throw new ConfigurationException(
+                    "The truststore password parameter is empty for the ZooKeeper client connection" + ".");
+        }
+    }
+
+    public static SslConf getSslConf(Map<String, Object> conf) {
+        return new SslConf(conf);
+    }
+    /**
+     * Helper class to contain the Truststore/Keystore paths for the ZK client connection over
+     * SSL/TLS.
+     */
+
+    static final class SslConf {
+        private final String keystoreLocation;
+        private final String keystorePassword;
+        private final String truststoreLocation;
+        private final String truststorePassword;
+        private final Boolean hostnameVerification;
+
+        /**
+         * Configuration for the ZooKeeper connection when SSL/TLS is enabled.
+         *
+         * @param conf configuration map
+         */
+        private SslConf(Map<String, Object> conf) {
+            keystoreLocation = ObjectReader.getString(conf.get(Config.STORM_ZOOKEEPER_SSL_KEYSTORE_PATH), "");
+            keystorePassword = ObjectReader.getString(conf.get(Config.STORM_ZOOKEEPER_SSL_KEYSTORE_PASSWORD), "");
+            truststoreLocation = ObjectReader.getString(conf.get(Config.STORM_ZOOKEEPER_SSL_TRUSTSTORE_PATH), "");
+            truststorePassword = ObjectReader.getString(conf.get(Config.STORM_ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD), "");
+            hostnameVerification = ObjectReader.getBoolean(conf.get(Config.STORM_ZOOKEEPER_SSL_HOSTNAME_VERIFICATION), true);
+        }
+
+        public String getKeystoreLocation() {
+            return keystoreLocation;
+        }
+
+        public String getKeystorePassword() {
+            return keystorePassword;
+        }
+
+        public String getTruststoreLocation() {
+            return truststoreLocation;
+        }
+
+        public String getTruststorePassword() {
+            return truststorePassword;
+        }
+
+        public Boolean getHostnameVerification() {
+            return hostnameVerification;
         }
     }
 

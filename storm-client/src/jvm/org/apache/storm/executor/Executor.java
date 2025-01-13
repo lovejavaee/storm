@@ -69,9 +69,9 @@ import org.apache.storm.metrics2.PerReporterGauge;
 import org.apache.storm.metrics2.RateCounter;
 import org.apache.storm.shade.com.google.common.annotations.VisibleForTesting;
 import org.apache.storm.shade.com.google.common.collect.Lists;
+import org.apache.storm.shade.net.minidev.json.JSONValue;
+import org.apache.storm.shade.net.minidev.json.parser.ParseException;
 import org.apache.storm.shade.org.jctools.queues.MpscChunkedArrayQueue;
-import org.apache.storm.shade.org.json.simple.JSONValue;
-import org.apache.storm.shade.org.json.simple.parser.ParseException;
 import org.apache.storm.stats.ClientStatsUtil;
 import org.apache.storm.stats.CommonStats;
 import org.apache.storm.task.WorkerTopologyContext;
@@ -285,6 +285,8 @@ public abstract class Executor implements Callable, JCQueue.Consumer {
         int taskId = addressedTuple.getDest();
 
         TupleImpl tuple = (TupleImpl) addressedTuple.getTuple();
+        String streamId = tuple.getSourceStreamId();
+        boolean isSpout = this instanceof SpoutExecutor;
         if (isDebug) {
             LOG.info("Processing received TUPLE: {} for TASK: {} ", tuple, taskId);
         }
@@ -292,6 +294,10 @@ public abstract class Executor implements Callable, JCQueue.Consumer {
         try {
             if (taskId != AddressedTuple.BROADCAST_DEST) {
                 tupleActionFn(taskId, tuple);
+            } else if (isSpout && streamId.equals(Constants.SYSTEM_TICK_STREAM_ID)) {
+                //taskId is irrelevant here. Ensures pending.rotate() is called once per tick.
+                tupleActionFn(taskIds.get(0), tuple);
+
             } else {
                 for (Integer t : taskIds) {
                     tupleActionFn(t, tuple);
@@ -335,10 +341,12 @@ public abstract class Executor implements Callable, JCQueue.Consumer {
             List<IMetricsConsumer.DataPoint> dataPoints = new ArrayList<>();
             if (nameToRegistry != null) {
                 for (Map.Entry<String, IMetric> entry : nameToRegistry.entrySet()) {
+                    String name = entry.getKey();
                     IMetric metric = entry.getValue();
                     Object value = metric.getValueAndReset();
+                    Map<String, String> dimensions = metric.getDimensions();
                     if (value != null) {
-                        IMetricsConsumer.DataPoint dataPoint = new IMetricsConsumer.DataPoint(entry.getKey(), value);
+                        IMetricsConsumer.DataPoint dataPoint = new IMetricsConsumer.DataPoint(name, value, dimensions);
                         dataPoints.add(dataPoint);
                     }
                 }

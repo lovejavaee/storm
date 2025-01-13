@@ -21,6 +21,10 @@ package org.apache.storm.daemon.ui;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Servlet;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
@@ -40,10 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.servlet.DispatcherType;
-import javax.servlet.Servlet;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.SecurityContext;
+import net.minidev.json.JSONValue;
 import org.apache.storm.Config;
 import org.apache.storm.Constants;
 import org.apache.storm.DaemonConfig;
@@ -110,7 +111,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.servlets.CrossOriginFilter;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.json.simple.JSONValue;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -232,7 +233,7 @@ public class UIHelpers {
                                                   String tsPassword, String tsType,
                                                   Boolean needClientAuth, Boolean wantClientAuth,
                                                   Integer headerBufferSize, boolean enableSslReload) {
-        SslContextFactory factory = new ReloadableSslContextFactory(enableSslReload);
+        SslContextFactory.Server factory = new ReloadableSslContextFactory(enableSslReload);
         factory.setExcludeCipherSuites("SSL_RSA_WITH_RC4_128_MD5", "SSL_RSA_WITH_RC4_128_SHA");
         factory.setExcludeProtocols("SSLv3");
         factory.setRenegotiationAllowed(false);
@@ -1150,7 +1151,7 @@ public class UIHelpers {
                                                          String window, Map<String, Object> config, String remoteUser) {
         Map<String, Object> result = new HashMap();
         Map<String, Object> topologyConf = (Map<String, Object>) JSONValue.parse(topologyPageInfo.get_topology_conf());
-        long messageTimeout = (long) topologyConf.get(Config.TOPOLOGY_MESSAGE_TIMEOUT_SECS);
+        int messageTimeout = (int) topologyConf.get(Config.TOPOLOGY_MESSAGE_TIMEOUT_SECS);
         Map<String, Object> unpackedTopologyPageInfo =
                 unpackTopologyInfo(topologyPageInfo, window, config);
         result.putAll(unpackedTopologyPageInfo);
@@ -2418,7 +2419,7 @@ public class UIHelpers {
         for (Map.Entry<String, Map> entry : namedLoggerlevels.entrySet()) {
             String loggerNMame = entry.getKey();
             String targetLevel = (String) entry.getValue().get("target_level");
-            Long timeout = (Long) entry.getValue().get("timeout");
+            long timeout = ((Number) entry.getValue().get("timeout")).longValue();
             LogLevel logLevel = new LogLevel();
             if (targetLevel == null) {
                 logLevel.set_action(LogLevelAction.REMOVE);

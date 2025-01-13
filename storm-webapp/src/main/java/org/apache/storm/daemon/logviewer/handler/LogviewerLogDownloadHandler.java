@@ -18,8 +18,9 @@
 
 package org.apache.storm.daemon.logviewer.handler;
 
+import jakarta.ws.rs.core.Response;
+
 import java.io.IOException;
-import javax.ws.rs.core.Response;
 
 import org.apache.storm.daemon.logviewer.utils.LogFileDownloader;
 import org.apache.storm.daemon.logviewer.utils.ResourceAuthorizer;
@@ -47,13 +48,13 @@ public class LogviewerLogDownloadHandler {
     }
 
     /**
-     * Download an worker log.
+     * Download a worker log.
      *
      * @param host host address
      * @param fileName file to download
      * @param user username
      * @return a Response which lets browsers download that file.
-     * @see {@link LogFileDownloader#downloadFile(String, String, String, boolean)}
+     *
      */
     public Response downloadLogFile(String host, String fileName, String user) throws IOException {
         workerLogs.setLogFilePermission(fileName);
@@ -67,7 +68,6 @@ public class LogviewerLogDownloadHandler {
      * @param fileName file to download
      * @param user username
      * @return a Response which lets browsers download that file.
-     * @see {@link LogFileDownloader#downloadFile(String, String, String, boolean)}
      */
     public Response downloadDaemonLogFile(String host, String fileName, String user) throws IOException {
         return logFileDownloadHelper.downloadFile(host, fileName, user, true);

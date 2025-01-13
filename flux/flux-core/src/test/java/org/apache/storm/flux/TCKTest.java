@@ -103,17 +103,6 @@ public class TCKTest {
         topology.validate();
     }
 
-
-    @Test
-    public void testHbase() throws Exception {
-        TopologyDef topologyDef = FluxParser.parseResource("/configs/simple_hbase.yaml", false, true, null, false);
-        Config conf = FluxBuilder.buildConfig(topologyDef);
-        ExecutionContext context = new ExecutionContext(topologyDef, conf);
-        StormTopology topology = FluxBuilder.buildTopology(context);
-        assertNotNull(topology);
-        topology.validate();
-    }
-
     @Test
     public void testBadHbase() throws Exception {
         TopologyDef topologyDef = FluxParser.parseResource("/configs/bad_hbase.yaml", false, true, null, false);
@@ -277,5 +266,18 @@ public class TCKTest {
 
         IllegalArgumentException expectedException = assertThrows(IllegalArgumentException.class, () -> FluxBuilder.buildTopology(context));
         assertTrue(expectedException.getMessage().contains("Couldn't find a suitable static method"));
+    }
+
+    @Test
+    public void testTopologyWithWorkerHook() throws Exception {
+        TopologyDef topologyDef = FluxParser.parseResource("/configs/worker_hook.yaml", false, true, null, false);
+        Config conf = FluxBuilder.buildConfig(topologyDef);
+        ExecutionContext context = new ExecutionContext(topologyDef, conf);
+        StormTopology topology = FluxBuilder.buildTopology(context);
+        assertNotNull(topology);
+        assertTrue(topologyDef.getName().equals("worker-hook-topology"));
+        assertTrue(topologyDef.getWorkerHooks().size() > 0);
+        assertTrue(topology.get_worker_hooks_size() > 0);
+        topology.validate();
     }
 }

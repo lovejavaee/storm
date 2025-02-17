@@ -35,12 +35,13 @@ storm.zookeeper.retry.interval: 1000
 storm.zookeeper.retry.intervalceiling.millis: 30000
 storm.zookeeper.auth.user: null
 storm.zookeeper.auth.password: null
-storm.exhibitor.port: 8080
-storm.exhibitor.poll.uripath: "/exhibitor/v1/cluster/list"
+storm.zookeeper.ssl.enable: false
+storm.zookeeper.ssl.hostnameVerification: false
 storm.cluster.mode: "distributed" # can be distributed or local
 storm.local.mode.zmq: false
 storm.thrift.transport: "org.apache.storm.security.auth.SimpleTransportPlugin"
 storm.thrift.socket.timeout.ms: 600000
+storm.thrift.tls.socket.timeout.ms: 600000
 storm.principal.tolocal: "org.apache.storm.security.auth.DefaultPrincipalToLocal"
 storm.group.mapping.service: "org.apache.storm.security.auth.ShellBasedGroupsMapping"
 storm.group.mapping.service.params: null
@@ -65,6 +66,13 @@ nimbus.seeds : ["localhost"]
 nimbus.thrift.port: 6627
 nimbus.thrift.threads: 64
 nimbus.thrift.max_buffer_size: 1048576
+nimbus.thrift.tls.port: 0
+nimbus.thrift.tls.threads: 64
+nimbus.thrift.tls.max_buffer_size: 1048576
+nimbus.thrift.client.use.tls: false
+nimbus.thrift.tls.transport: "org.apache.storm.security.auth.tls.TlsTransportPlugin"
+nimbus.thrift.tls.client.auth.required: true
+topology.worker.nimbus.thrift.client.use.tls: false
 nimbus.childopts: "-Xmx1024m"
 nimbus.task.timeout.secs: 30
 nimbus.supervisor.timeout.secs: 60
@@ -89,6 +97,7 @@ nimbus.topology.blobstore.deletion.delay.ms: 300000
 ### ui.* configs are for the master
 ui.host: 0.0.0.0
 ui.port: 8080
+ui.title: "Storm UI"
 ui.childopts: "-Xmx768m"
 ui.actions.enabled: true
 ui.filter: null
@@ -223,6 +232,7 @@ task.credentials.poll.secs: 30
 storm.messaging.netty.server_worker_threads: 1
 storm.messaging.netty.client_worker_threads: 1
 storm.messaging.netty.buffer_size: 5242880 #5MB buffer
+storm.messaging.netty.flush_timeout_ms: 600000
 
 # The netty write buffer high watermark in bytes.
 # If the number of bytes queued in the netty's write buffer exceeds this value, the netty client will block
@@ -242,6 +252,7 @@ storm.messaging.netty.transfer.batch.size: 262144
 storm.messaging.netty.socket.backlog: 500
 
 # By default, the Netty SASL authentication is set to false.  Users can override and set it true for a specific topology.
+# see https://issues.apache.org/jira/browse/STORM-348 for more details
 storm.messaging.netty.authentication: false
 
 # Default plugin to use for automatic network topology discovery
@@ -366,6 +377,7 @@ pacemaker.thrift.message.size.max: 10485760
 #default storm daemon metrics reporter plugins
 storm.daemon.metrics.reporter.plugins:
      - "org.apache.storm.daemon.metrics.reporters.JmxPreparableReporter"
+storm.daemon.metrics.reporter.interval.secs: 10
 
 storm.metricstore.class: "org.apache.storm.metricstore.rocksdb.RocksDbStore"
 storm.metricprocessor.class: "org.apache.storm.metricstore.NimbusMetricProcessor"

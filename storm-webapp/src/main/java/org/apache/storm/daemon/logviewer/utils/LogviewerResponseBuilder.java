@@ -20,26 +20,23 @@ package org.apache.storm.daemon.logviewer.utils;
 
 import static j2html.TagCreator.body;
 import static j2html.TagCreator.h2;
-import static javax.ws.rs.core.Response.Status.FORBIDDEN;
-import static javax.ws.rs.core.Response.Status.OK;
 import static org.apache.commons.lang.StringEscapeUtils.escapeHtml;
 
 import com.codahale.metrics.Meter;
 import com.google.common.io.ByteStreams;
 
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.StreamingOutput;
+
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
-
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.StreamingOutput;
 
 import org.apache.storm.daemon.common.JsonResponseBuilder;
 import org.apache.storm.daemon.ui.UIHelpers;
@@ -55,7 +52,7 @@ public class LogviewerResponseBuilder {
      * @param content HTML entity content, String type
      */
     public static Response buildSuccessHtmlResponse(String content) {
-        return Response.status(OK).entity(content)
+        return Response.status(jakarta.ws.rs.core.Response.Status.OK).entity(content)
                 .type(MediaType.TEXT_HTML_TYPE).build();
     }
 
@@ -65,7 +62,6 @@ public class LogviewerResponseBuilder {
      * @param entity entity object to represent it as JSON
      * @param callback callbackParameterName for JSONP
      * @param origin origin
-     * @see {@link JsonResponseBuilder}
      */
     public static Response buildSuccessJsonResponse(Object entity, String callback, String origin) {
         return new JsonResponseBuilder().setData(entity).setCallback(callback)
@@ -83,7 +79,7 @@ public class LogviewerResponseBuilder {
         try {
             // do not close this InputStream in method: it will be used from jetty server
             InputStream is = Files.newInputStream(file.toPath());
-            return Response.status(OK)
+            return Response.status(jakarta.ws.rs.core.Response.Status.OK)
                     .entity(wrapWithStreamingOutput(is))
                     .type(MediaType.APPLICATION_OCTET_STREAM_TYPE)
                     .header("Content-Disposition", "attachment; filename=\"" + contentDispositionName + "\"")
@@ -101,7 +97,7 @@ public class LogviewerResponseBuilder {
      */
     public static Response buildResponseUnauthorizedUser(String user) {
         String entity = buildUnauthorizedUserHtml(user);
-        return Response.status(FORBIDDEN)
+        return Response.status(jakarta.ws.rs.core.Response.Status.FORBIDDEN)
                 .entity(entity)
                 .type(MediaType.TEXT_HTML_TYPE)
                 .build();

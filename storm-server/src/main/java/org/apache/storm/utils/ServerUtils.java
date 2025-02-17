@@ -33,6 +33,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -707,7 +708,25 @@ public class ServerUtils {
             double memoryRequirement = entry.getValue().getOnHeapMemoryMb();
             totalMemoryRequired += memoryRequirement * parallelism;
         }
+
+        double ackerMem = getTotalAckerExecutorMemoryUsageForTopo(topology, topoConf);
+        totalMemoryRequired += ackerMem;
+
         return totalMemoryRequired;
+    }
+
+    private static double getTotalAckerExecutorMemoryUsageForTopo(
+            StormTopology topology, Map<String, Object> topologyConf)
+            throws InvalidTopologyException {
+        topology = StormCommon.systemTopology(topologyConf, topology);
+        Map<String, NormalizedResourceRequest> boltResources = ResourceUtils.getBoltsResources(topology, topologyConf);
+        NormalizedResourceRequest entry = boltResources.get(Acker.ACKER_COMPONENT_ID);
+        if (entry == null) {
+            return 0.0d;
+        }
+        Map<String, Integer> componentParallelism = getComponentParallelism(topologyConf, topology);
+        int parallelism = componentParallelism.getOrDefault(Acker.ACKER_COMPONENT_ID, 1);
+        return entry.getTotalMemoryMb() * parallelism;
     }
 
     public static Map<String, Integer> getComponentParallelism(Map<String, Object> topoConf, StormTopology topology)
@@ -803,7 +822,7 @@ public class ServerUtils {
         LOG.debug("CMD: tasklist /fo list /fi \"pid eq {}\" /v", pid);
         ProcessBuilder pb = new ProcessBuilder("tasklist", "/fo", "list", "/fi", "pid eq " + pid, "/v");
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
             int lineNo = 0;
             String line;
             while ((line = in.readLine()) != null) {
@@ -837,7 +856,7 @@ public class ServerUtils {
         LOG.debug("CMD: ps -o user -p {}", pid);
         ProcessBuilder pb = new ProcessBuilder("ps", "-o", "user", "-p", String.valueOf(pid));
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
             int lineNo = 1;
             String line = in.readLine();
             LOG.debug("CMD-LINE#{}: {}", lineNo, line);
@@ -910,46 +929,47 @@ public class ServerUtils {
      * @throws IOException on I/O exception
      */
     private static boolean isAnyWindowsProcessAlive(Collection<Long> pids, String user) throws IOException {
-        List<String> cmdArgs = new ArrayList<>();
-        cmdArgs.add("tasklist");
-        cmdArgs.add("/fo");
-        cmdArgs.add("list");
-        pids.forEach(pid -> {
+        List<String> unexpectedUsers = new ArrayList<>();
+        for (Long pid: pids) {
+            List<String> cmdArgs = new ArrayList<>();
+            cmdArgs.add("tasklist");
+            cmdArgs.add("/fo");
+            cmdArgs.add("list");
             cmdArgs.add("/fi");
             cmdArgs.add("pid eq " + pid);
-        });
-        cmdArgs.add("/v");
-        LOG.debug("CMD: {}", String.join(" ", cmdArgs));
-        ProcessBuilder pb = new ProcessBuilder(cmdArgs);
-        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-        List<String> unexpectedUsers = new ArrayList<>();
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
-            int lineNo = 0;
-            String line;
-            while ((line = in.readLine()) != null) {
-                lineNo++;
-                LOG.debug("CMD-LINE#{}: {}", lineNo, line);
-                if (line.contains("User Name:")) { //Check for : in case someone called their user "User Name"
-                    //This line contains the user name for the pid we're looking up
-                    //Example line: "User Name:    exampleDomain\exampleUser"
-                    List<String> userNameLineSplitOnWhitespace = Arrays.asList(line.split(":"));
-                    if (userNameLineSplitOnWhitespace.size() == 2) {
-                        List<String> userAndMaybeDomain = Arrays.asList(userNameLineSplitOnWhitespace.get(1).trim().split("\\\\"));
-                        String processUser = userAndMaybeDomain.size() == 2 ? userAndMaybeDomain.get(1) : userAndMaybeDomain.get(0);
-                        processUser = processUser.trim();
-                        if (user.equals(processUser)) {
-                            return true;
+            cmdArgs.add("/v");
+            LOG.debug("CMD: {}", String.join(" ", cmdArgs));
+            ProcessBuilder pb = new ProcessBuilder(cmdArgs);
+            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
+                int lineNo = 0;
+                String line;
+                while ((line = in.readLine()) != null) {
+                    lineNo++;
+                    LOG.debug("CMD-LINE#{}: {}", lineNo, line);
+                    if (line.contains("User Name:")) { //Check for : in case someone called their user "User Name"
+                        //This line contains the user name for the pid we're looking up
+                        //Example line: "User Name:    exampleDomain\exampleUser"
+                        List<String> userNameLineSplitOnWhitespace = Arrays.asList(line.split(":"));
+                        if (userNameLineSplitOnWhitespace.size() == 2) {
+                            List<String> userAndMaybeDomain = Arrays.asList(userNameLineSplitOnWhitespace.get(1).trim().split("\\\\"));
+                            String processUser = userAndMaybeDomain.size() == 2 ? userAndMaybeDomain.get(1) : userAndMaybeDomain.get(0);
+                            processUser = processUser.trim();
+                            if (user.equals(processUser)) {
+                                return true;
+                            }
+                            unexpectedUsers.add(processUser);
+                        } else {
+                            LOG.error("Received unexpected output from tasklist command. Expected one colon in user name line. Line was {}",
+                                    line);
                         }
-                        unexpectedUsers.add(processUser);
-                    } else {
-                        LOG.error("Received unexpected output from tasklist command. Expected one colon in user name line. Line was {}",
-                            line);
+                        break;
                     }
                 }
+            } catch (IOException ex) {
+                String err = String.format("Cannot read output of command \"%s\"", String.join(" ", cmdArgs));
+                throw new IOException(err, ex);
             }
-        } catch (IOException ex) {
-            String err = String.format("Cannot read output of command \"%s\"", String.join(" ", cmdArgs));
-            throw new IOException(err, ex);
         }
         String pidsAsStr = StringUtils.join(pids, ",");
         if (unexpectedUsers.isEmpty()) {
@@ -988,7 +1008,7 @@ public class ServerUtils {
         ProcessBuilder pb = new ProcessBuilder("ps", "-o", "user", "-p", pidParams);
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
         List<String> unexpectedUsers = new ArrayList<>();
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
             int lineNo = 1;
             String line = in.readLine();
             LOG.debug("CMD-LINE#{}: {}", lineNo, line);
@@ -1032,7 +1052,7 @@ public class ServerUtils {
         ProcessBuilder pb = new ProcessBuilder("ps", "-o", "uid", "-p", pidParams);
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
         List<String> unexpectedUsers = new ArrayList<>();
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
             int lineNo = 1;
             String line = in.readLine();
             LOG.debug("CMD-LINE#{}: {}", lineNo, line);
@@ -1082,11 +1102,22 @@ public class ServerUtils {
         cmdArgs.add("-u");
         if (user != null && !user.isEmpty()) {
             cmdArgs.add(user);
+            int exitCode = 0;
+            try {
+                exitCode = new ProcessBuilder(cmdArgs).start().waitFor();
+            } catch (Exception e) {
+                // Ignore
+            } finally {
+                if (exitCode != 0) {
+                    LOG.debug("CMD: '{}' returned exit code of {}", String.join(" ", cmdArgs), exitCode);
+                    cmdArgs.remove(user);
+                }
+            }
         }
         LOG.debug("CMD: {}", String.join(" ", cmdArgs));
         ProcessBuilder pb = new ProcessBuilder(cmdArgs);
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
             String line = in.readLine();
             LOG.debug("CMD-LINE#1: {}", line);
             try {
@@ -1120,7 +1151,7 @@ public class ServerUtils {
         LOG.debug("CMD: ls -dn {}", fpath);
         ProcessBuilder pb = new ProcessBuilder("ls", "-dn", fpath);
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream()))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(pb.start().getInputStream(), StandardCharsets.UTF_8))) {
             String line = in.readLine();
             LOG.debug("CMD-OUTLINE: {}", line);
             line = line.trim();
@@ -1396,6 +1427,9 @@ public class ServerUtils {
         topology = StormCommon.systemTopology(topologyConf, topology);
         Map<String, NormalizedResourceRequest> boltResources = ResourceUtils.getBoltsResources(topology, topologyConf);
         NormalizedResourceRequest entry = boltResources.get(Acker.ACKER_COMPONENT_ID);
+        if (entry == null) {
+            return 0.0d;
+        }
         return entry.getTotalMemoryMb();
     }
 

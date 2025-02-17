@@ -23,9 +23,9 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import org.apache.storm.shade.org.json.simple.JSONObject;
-import org.apache.storm.shade.org.json.simple.JSONValue;
-import org.apache.storm.shade.org.json.simple.parser.ParseException;
+import org.apache.storm.shade.net.minidev.json.JSONObject;
+import org.apache.storm.shade.net.minidev.json.JSONValue;
+import org.apache.storm.shade.net.minidev.json.parser.ParseException;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.utils.Utils;
 
@@ -154,9 +154,9 @@ public class JsonSerializer implements ISerializer {
 
         if (command.equals("log")) {
             Object logLevelObj = msg.get("level");
-            if (logLevelObj != null && logLevelObj instanceof Long) {
-                long logLevel = (Long) logLevelObj;
-                shellMsg.setLogLevel((int) logLevel);
+            if (logLevelObj != null && logLevelObj instanceof Number) {
+                int logLevel = ((Number) logLevelObj).intValue();
+                shellMsg.setLogLevel(logLevel);
             }
         }
 

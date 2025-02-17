@@ -41,17 +41,12 @@ then
     TEST_MODULES=storm-core
 elif [ "$2" == "External" ]
 then
-    if [ "$JDK_VERSION" == "11" ]
-    then
-        TEST_MODULES='!storm-client,!storm-server,!storm-core,!storm-webapp,!storm-shaded-deps,!external/storm-cassandra,!external/storm-hive,!external/storm-hdfs,!external/storm-hbase,!sql/storm-sql-external/storm-sql-hdfs,!external/storm-hdfs-blobstore'
-    else
-        TEST_MODULES='!storm-client,!storm-server,!storm-core,!storm-webapp,!storm-shaded-deps'
-    fi
+    TEST_MODULES='!storm-client,!storm-server,!storm-core,!storm-webapp,!storm-shaded-deps'
 fi
 # We should be concerned that Travis CI could be very slow because it uses VM
 export STORM_TEST_TIMEOUT_MS=150000
 # Github Action Runner only has 7GB of memory, lets use 1.5GB for build, with enough stack to run tests
-export MAVEN_OPTS="-Xmx1536m"
+export MAVEN_OPTS="-Xmx2048m"
 
 mvn --batch-mode test -fae -Pnative,all-tests,examples,externals -Prat -pl "$TEST_MODULES"
 BUILD_RET_VAL=$?

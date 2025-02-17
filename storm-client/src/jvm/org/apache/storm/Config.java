@@ -46,6 +46,7 @@ import org.apache.storm.validation.ConfigValidationAnnotations.IsImplementationO
 import org.apache.storm.validation.ConfigValidationAnnotations.IsInteger;
 import org.apache.storm.validation.ConfigValidationAnnotations.IsKryoReg;
 import org.apache.storm.validation.ConfigValidationAnnotations.IsListEntryCustom;
+import org.apache.storm.validation.ConfigValidationAnnotations.IsLong;
 import org.apache.storm.validation.ConfigValidationAnnotations.IsMapEntryCustom;
 import org.apache.storm.validation.ConfigValidationAnnotations.IsMapEntryType;
 import org.apache.storm.validation.ConfigValidationAnnotations.IsNumber;
@@ -131,10 +132,9 @@ public class Config extends HashMap<String, Object> {
     public static final String TASK_CREDENTIALS_POLL_SECS = "task.credentials.poll.secs";
     /**
      * Whether to enable backpressure in for a certain topology.
-     *
-     * @deprecated: In Storm 2.0. Retained for enabling transition from 1.x. Will be removed soon.
+     * Note: Retained for enabling transition from 1.x. Will be removed soon.
      */
-    @Deprecated
+    @Deprecated(forRemoval = true, since = "2.0.0")
     @IsBoolean
     public static final String TOPOLOGY_BACKPRESSURE_ENABLE = "topology.backpressure.enable";
     /**
@@ -859,9 +859,18 @@ public class Config extends HashMap<String, Object> {
     @IsString
     public static final String STORM_DO_AS_USER = "storm.doAsUser";
     /**
-     * The number of machines that should be used by this topology to isolate it from all others. Set storm.scheduler to
-     * org.apache.storm.scheduler.multitenant.MultitenantScheduler
-     */
+     * The maximum number of machines that should be used by this topology. This configuration can
+     * be used to isolate topologies from each other. See {@code  org.apache.storm.scheduler.multitenant.MultitenantScheduler}.
+     * Round Robin Strategy uses this value to avoid spreading a topology too
+     * thinly over a large number of machines - avoiding the extreme case where the topology would be spread over
+     * all workers and thus deny scheduling of other topologies. Round Robin scheduling will occupy all the workers on
+     * this limited number of machines, forcing other topologies to be scheduled on other machines; thus isolating the
+     * topology from other topologies.
+     * Set {@code storm.scheduler} to {@code org.apache.storm.scheduler.multitenant.MultitenantScheduler}
+     * Alternatively set {@code storm.scheduler} to {@code org.apache.storm.scheduler.resource.ResourceAwareScheduler}
+     * using {@link Config#TOPOLOGY_SCHEDULER_STRATEGY} set to
+     * {@code org.apache.storm.scheduler.resource.strategies.scheduling.RoundRobinResourceAwareStrategy}
+     * */
     @IsInteger
     @IsPositiveNumber
     public static final String TOPOLOGY_ISOLATED_MACHINES = "topology.isolate.machines";
@@ -1096,6 +1105,208 @@ public class Config extends HashMap<String, Object> {
      */
     @IsInteger
     public static final String STORM_THRIFT_SOCKET_TIMEOUT_MS = "storm.thrift.socket.timeout.ms";
+
+    /**
+     * Which port the Thrift TLS interface of Nimbus should run on.
+     * Clients can connect to this port to upload jars and submit topologies.
+     * Default value is 0 and it means thrift TLS is not configured.
+     */
+    @IsInteger
+    @IsPositiveNumber(includeZero = true)
+    public static final String NIMBUS_THRIFT_TLS_PORT = "nimbus.thrift.tls.port";
+
+    /**
+     * The Nimbus transport plug-in for Thrift client/server TLS communication.
+     * Default to {@link #STORM_THRIFT_TRANSPORT_PLUGIN} if not configured.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_TRANSPORT_PLUGIN = "nimbus.thrift.tls.transport";
+
+    /**
+     * Whether the TLS Server requires the client to provide its cert or not when TLS is enabled.
+     * Meaning whether the SSL connection is mTLS, or one-way TLS.
+     * The default value is set false.
+     */
+    @IsBoolean
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_AUTH_REQUIRED = "nimbus.thrift.tls.client.auth.required";
+
+    /**
+     * The path to the keystore that the nimbus TLS server uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_SERVER_KEYSTORE_PATH = "nimbus.thrift.tls.server.keystore.path";
+
+    /**
+     * The password of the keystore that the nimbus TLS server uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_SERVER_KEYSTORE_PASSWORD = "nimbus.thrift.tls.server.keystore.password";
+
+    /**
+     * Launch only the tls server.
+     */
+    @IsBoolean
+    public static final String NIMBUS_THRIFT_TLS_SERVER_ONLY = "nimbus.thrift.tls.server.only";
+
+    /**
+     * The path to the truststore that the nimbus TLS server uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_SERVER_TRUSTSTORE_PATH = "nimbus.thrift.tls.server.truststore.path";
+
+    /**
+     * The password of the truststore that the nimbus TLS server uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_SERVER_TRUSTSTORE_PASSWORD = "nimbus.thrift.tls.server.truststore.password";
+
+    /**
+     * The path to the keystore that the nimbus TLS client uses.
+     * It is important to not set nimbus.thrift.tls.client.key.path
+     * and nimbus.thrift.tls.client.cert.path in order to use client keystore
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_KEYSTORE_PATH = "nimbus.thrift.tls.client.keystore.path";
+
+    /**
+     * The password of the keystore that the nimbus TLS client uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_KEYSTORE_PASSWORD = "nimbus.thrift.tls.client.keystore.password";
+
+    /**
+     * The path to the key that the nimbus TLS client uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_KEY_PATH = "nimbus.thrift.tls.client.key.path";
+
+    /**
+     * The path of the certificate that the nimbus TLS client uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_CERT_PATH = "nimbus.thrift.tls.client.cert.path";
+
+    /**
+     * The path to the truststore that the nimbus TLS client uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_TRUSTSTORE_PATH = "nimbus.thrift.tls.client.truststore.path";
+
+    /**
+     * The password of the truststore that the nimbus TLS client uses.
+     */
+    @IsString
+    public static final String NIMBUS_THRIFT_TLS_CLIENT_TRUSTSTORE_PASSWORD = "nimbus.thrift.tls.client.truststore.password";
+
+    /**
+     * The number of threads that should be used by the nimbus thrift TLS server.
+     */
+    @IsInteger
+    @IsPositiveNumber
+    public static final String NIMBUS_THRIFT_TLS_THREADS = "nimbus.thrift.tls.threads";
+
+    /**
+     * The maximum buffer size thrift TLS should use when reading messages.
+     */
+    @IsInteger
+    @IsPositiveNumber
+    public static final String NIMBUS_THRIFT_TLS_MAX_BUFFER_SIZE = "nimbus.thrift.tls.max_buffer_size";
+
+    /**
+     * How long before a Thrift TLS Client socket hangs before timeout and restart the socket.
+     */
+    @IsInteger
+    public static final String STORM_THRIFT_TLS_SOCKET_TIMEOUT_MS = "storm.thrift.tls.socket.timeout.ms";
+
+    /**
+     * Whether the workers of the topology should use TLS or non-TLS thrift to connect to nimbus.
+     * It is achieved by changing the value of {@link #NIMBUS_THRIFT_CLIENT_USE_TLS} for workers.
+     * Nimbus will adjust this value in topology conf during submission, so that the value will only be set true if
+     * both Nimbus conf and topology conf have it set as true.
+     */
+    @IsBoolean
+    public static final String TOPOLOGY_WORKER_NIMBUS_THRIFT_CLIENT_USE_TLS = "topology.worker.nimbus.thrift.client.use.tls";
+
+    /**
+     * Whether the nimbus client should use TLS or non-TLS thrift to connect to nimbus.
+     */
+    @IsBoolean
+    public static final String NIMBUS_THRIFT_CLIENT_USE_TLS = "nimbus.thrift.client.use.tls";
+
+    /**
+     * Whether the TLS Server requires the client to provide its cert or not when TLS is enabled.
+     * Meaning whether the SSL connection is mTLS, or one-way TLS.
+     * The default value is set false.
+     */
+    @IsBoolean
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_AUTH_REQUIRED = "supervisor.thrift.tls.client.auth.required";
+
+    /**
+     * The path to the keystore that the supervisor TLS server uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_SERVER_KEYSTORE_PATH = "supervisor.thrift.tls.server.keystore.path";
+
+    /**
+     * The password of the keystore that the supervisor TLS server uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_SERVER_KEYSTORE_PASSWORD = "supervisor.thrift.tls.server.keystore.password";
+
+    /**
+     * The path to the truststore that the supervisor TLS server uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_SERVER_TRUSTSTORE_PATH = "supervisor.thrift.tls.server.truststore.path";
+
+    /**
+     * The password of the truststore that the supervisor TLS server uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_SERVER_TRUSTSTORE_PASSWORD = "supervisor.thrift.tls.server.truststore.password";
+
+    /**
+     * The path to the keystore that the supervisor TLS client uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_KEYSTORE_PATH = "supervisor.thrift.tls.client.keystore.path";
+
+    /**
+     * The password of the keystore that the supervisor TLS client uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_KEYSTORE_PASSWORD = "supervisor.thrift.tls.client.keystore.password";
+
+    /**
+     * The path to the truststore that the supervisor TLS client uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_TRUSTSTORE_PATH = "supervisor.thrift.tls.client.truststore.path";
+
+    /**
+     * The password of the truststore that the supervisor TLS client uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_TRUSTSTORE_PASSWORD = "supervisor.thrift.tls.client.truststore.password";
+
+    /**
+     * The path to the key that the supervisor TLS client uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_KEY_PATH = "supervisor.thrift.tls.client.key.path";
+
+    /**
+     * The path of the certificate that the supervisor TLS client uses.
+     */
+    @IsString
+    public static final String SUPERVISOR_THRIFT_TLS_CLIENT_CERT_PATH = "supervisor.thrift.tls.client.cert.path";
+
+    /**
+     * Whether the supervisor clients should use TLS or non-TLS.
+     */
+    @IsBoolean
+    public static final String SUPERVISOR_THRIFT_CLIENT_USE_TLS = "supervisor.thrift.client.use.tls";
+
     /**
      * The DRPC transport plug-in for Thrift client/server communication.
      */
@@ -1208,6 +1419,25 @@ public class Config extends HashMap<String, Object> {
      */
     @IsString
     public static final String STORM_ZOOKEEPER_TOPOLOGY_AUTH_SCHEME = "storm.zookeeper.topology.auth.scheme";
+
+    /** Enable SSL/TLS for ZooKeeper client connection. */
+    @IsBoolean
+    public static final String ZK_SSL_ENABLE = "storm.zookeeper.ssl.enable";
+    /** Keystore location for ZooKeeper client connection over SSL. */
+    @IsString
+    public static final String STORM_ZOOKEEPER_SSL_KEYSTORE_PATH = "storm.zookeeper.ssl.keystore.path";
+    /** Keystore password for ZooKeeper client connection over SSL. */
+    @IsString
+    public static final String STORM_ZOOKEEPER_SSL_KEYSTORE_PASSWORD = "storm.zookeeper.ssl.keystore.password";
+    /** Truststore location for ZooKeeper client connection over SSL. */
+    @IsString
+    public static final String STORM_ZOOKEEPER_SSL_TRUSTSTORE_PATH = "storm.zookeeper.ssl.truststore.path";
+    /** Truststore password for ZooKeeper client connection over SSL.  */
+    @IsString
+    public static final String STORM_ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD = "storm.zookeeper.ssl.truststore.password";
+    /** Enable or disable hostname verification.*/
+    @IsBoolean
+    public static final String STORM_ZOOKEEPER_SSL_HOSTNAME_VERIFICATION = "storm.zookeeper.ssl.hostnameVerification";
     /**
      * The delegate for serializing metadata, should be used for serialized objects stored in zookeeper and on disk. This is NOT used for
      * compressing serialized tuples sent between topologies.
@@ -1229,9 +1459,9 @@ public class Config extends HashMap<String, Object> {
 
     /**
      * Configure the topology metrics reporters to be used on workers.
-     * @deprecated Use {@link Config#TOPOLOGY_METRICS_REPORTERS} instead.
+     * Use {@link Config#TOPOLOGY_METRICS_REPORTERS} instead.
      */
-    @Deprecated
+    @Deprecated(forRemoval = true, since = "2.0.0")
     @IsListEntryCustom(entryValidatorClasses = { MetricReportersValidator.class })
     public static final String STORM_METRICS_REPORTERS = "storm.metrics.reporters";
 
@@ -1260,9 +1490,9 @@ public class Config extends HashMap<String, Object> {
      * If the instance field of the principal is the string "_HOST", it will
      * be replaced with the host name of the server the daemon is running on
      * (by calling {@link #getBlobstoreHDFSPrincipal(Map conf)} method).
-     * @Deprecated Use {@link Config#STORM_HDFS_LOGIN_PRINCIPAL} instead.
+     * Note: Use {@link Config#STORM_HDFS_LOGIN_PRINCIPAL} instead.
      */
-    @Deprecated
+    @Deprecated(forRemoval = true, since = "2.0.0")
     @IsString
     public static final String BLOBSTORE_HDFS_PRINCIPAL = "blobstore.hdfs.principal";
     /**
@@ -1443,6 +1673,7 @@ public class Config extends HashMap<String, Object> {
     public static final String STORM_MESSAGING_TRANSPORT = "storm.messaging.transport";
     /**
      * Netty based messaging: Is authentication required for Netty messaging from client worker process to server worker process.
+     * See https://issues.apache.org/jira/browse/STORM-348 for more details
      */
     @IsBoolean
     public static final String STORM_MESSAGING_NETTY_AUTHENTICATION = "storm.messaging.netty.authentication";
@@ -1507,7 +1738,91 @@ public class Config extends HashMap<String, Object> {
      * Netty based messaging: The # of worker threads for the client.
      */
     @IsInteger
-    public static final String STORM_MESSAGING_NETTY_CLIENT_WORKER_THREADS = "storm.messaging.netty.client_worker_threads";
+    public static final String STORM_MESSAGING_NETTY_CLIENT_WORKER_THREADS =
+            "storm.messaging.netty.client_worker_threads";
+
+    /**
+     * Netty based messaging: Enables TLS connections between workers.
+     */
+    @IsBoolean
+    public static final String STORM_MESSAGING_NETTY_TLS_ENABLE = "storm.messaging.netty.tls.enable";
+
+    /**
+     * Netty based messaging: When using TLS connections, adds validation that open SSL libraries are available.
+     */
+    @IsBoolean
+    public static final String STORM_MESSAGING_NETTY_TLS_REQUIRE_OPEN_SSL = "storm.messaging.netty.tls.require.open.ssl";
+
+    /**
+     * Netty based messaging: Specifies the TLS ciphers to be used when enabled.
+     */
+    @IsStringOrStringList
+    public static final String STORM_MESSAGING_NETTY_TLS_CIPHERS = "storm.messaging.netty.tls.ciphers";
+
+    /**
+     * Netty based messaging: Specifies the truststore when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_TRUSTSTORE_PATH = "storm.messaging.netty.tls.truststore.path";
+
+    /**
+     * Netty based messaging: Specifies the truststore password when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_TRUSTSTORE_PASSWORD = "storm.messaging.netty.tls.truststore.password";
+
+    /**
+     * Netty based messaging: Specifies the keystore when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_KEYSTORE_PATH = "storm.messaging.netty.tls.keystore.path";
+
+    /**
+     * Netty based messaging: Specifies the keystore password when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_KEYSTORE_PASSWORD = "storm.messaging.netty.tls.keystore.password";
+
+    /**
+     * Netty based messaging: Specifies the client truststore when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_CLIENT_TRUSTSTORE_PATH = "storm.messaging.netty.tls.client.truststore.path";
+
+    /**
+     * Netty based messaging: Specifies the client truststore password when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_CLIENT_TRUSTSTORE_PASSWORD =
+            "storm.messaging.netty.tls.client.truststore.password";
+
+    /**
+     * Netty based messaging: Specifies the client keystore when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_CLIENT_KEYSTORE_PATH = "storm.messaging.netty.tls.client.keystore.path";
+
+    /**
+     * Netty based messaging: Specifies the client keystore password when TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_CLIENT_KEYSTORE_PASSWORD =
+            "storm.messaging.netty.tls.client.keystore.password";
+
+    /**
+     * Netty based messaging: Specifies the protocols TLS is enabled.
+     */
+    @IsString
+    public static final String STORM_MESSAGING_NETTY_TLS_SSL_PROTOCOLS = "storm.messaging.netty.tls.ssl.protocols";
+
+    /**
+    /**
+     * Netty based messaging: The number of milliseconds that a Netty client will retry flushing messages that are already
+     * buffered to be sent.
+     */
+    @IsLong
+    @IsPositiveNumber
+    public static final String STORM_MESSAGING_NETTY_FLUSH_TIMEOUT_MS = "storm.messaging.netty.flush_timeout_ms";
     /**
      * Should the supervior try to run the worker as the lauching user or not.  Defaults to false.
      */
@@ -1657,43 +1972,6 @@ public class Config extends HashMap<String, Object> {
      */
     @IsString
     public static final String STORM_WORKERS_ARTIFACTS_DIR = "storm.workers.artifacts.dir";
-    /**
-     * A list of hosts of Exhibitor servers used to discover/maintain connection to ZooKeeper cluster. Any configured ZooKeeper servers will
-     * be used for the curator/exhibitor backup connection string.
-     */
-    @IsStringList
-    public static final String STORM_EXHIBITOR_SERVERS = "storm.exhibitor.servers";
-    /**
-     * The port Storm will use to connect to each of the exhibitor servers.
-     */
-    @IsInteger
-    @IsPositiveNumber
-    public static final String STORM_EXHIBITOR_PORT = "storm.exhibitor.port";
-    /*
-     * How often to poll Exhibitor cluster in millis.
-     */
-    @IsString
-    public static final String STORM_EXHIBITOR_URIPATH = "storm.exhibitor.poll.uripath";
-    /**
-     * How often to poll Exhibitor cluster in millis.
-     */
-    @IsInteger
-    public static final String STORM_EXHIBITOR_POLL = "storm.exhibitor.poll.millis";
-    /**
-     * The number of times to retry an Exhibitor operation.
-     */
-    @IsInteger
-    public static final String STORM_EXHIBITOR_RETRY_TIMES = "storm.exhibitor.retry.times";
-    /*
-     * The interval between retries of an Exhibitor operation.
-     */
-    @IsInteger
-    public static final String STORM_EXHIBITOR_RETRY_INTERVAL = "storm.exhibitor.retry.interval";
-    /**
-     * The ceiling of the interval between retries of an Exhibitor operation.
-     */
-    @IsInteger
-    public static final String STORM_EXHIBITOR_RETRY_INTERVAL_CEILING = "storm.exhibitor.retry.intervalceiling.millis";
     /**
      * The connection timeout for clients to ZooKeeper.
      */

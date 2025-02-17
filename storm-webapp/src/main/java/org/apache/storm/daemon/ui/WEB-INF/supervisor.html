@@ -39,9 +39,7 @@
 <body>
 <div class="supervisor-page container-fluid">
   <div class="row">
-    <div class="col-md-11">
-      <h1><a href="/">Storm UI</a></h1>
-    </div>
+    <div id="ui-title" class="col-md-11"></div>
     <div id="ui-user" class="col-md-1"></div>
   </div>
   <div class="row">
@@ -113,6 +111,11 @@ $(document).ready(function() {
                 $("#json-response-error").append(Mustache.render($(template).filter("#json-error-template").html(),errorJson));
             });
         }
+    });
+
+    $.getJSON("/api/v1/cluster/configuration",function(response,status,jqXHR) {
+        const uiTitle = $("#ui-title");
+        setStormUITitle(uiTitle, response);				
     });
 
     $.getJSON(url,function(response,status,jqXHR) {
